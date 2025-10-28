@@ -47,10 +47,8 @@ def black_price_forward(forward_price: float, strike: float, tte_years: float, i
     w_val = w(iv, tte_years)
     if option_type == "call":
         price = DF * ((forward_price * norm.cdf(d1(w_val, k)) - strike * norm.cdf(d2(w_val, k))))
-        return float(price)
     elif option_type == "put":
         price = DF * (-(forward_price * norm.cdf(-d1(w_val, k)) - strike * norm.cdf(-d2(w_val, k))))
-        return float(price)
     else:
         raise ValueError(f"Invalid option_type: {option_type}. Must be 'call' or 'put'")
-    
+    return float(price)
