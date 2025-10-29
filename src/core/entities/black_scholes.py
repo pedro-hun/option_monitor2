@@ -39,16 +39,16 @@ def discount_factor(r: float, tte_years: float) -> float:
     """
     return (1 + r) ** (-tte_years)
 
-def black_price_forward(forward_price: float, strike: float, tte_years: float, iv: float, r: float, option_type: str, k: float) -> float:
+def black_scholes(spot_price: float, strike: float, tte_years: float, iv: float, r: float, option_type: str, k: float, borrow: float) -> float:
     """
     Calculate Black-Scholes price from forward price and implied volatility
     """
     DF = discount_factor(r, tte_years)
     w_val = w(iv, tte_years)
     if option_type == "call":
-        price = DF * ((forward_price * norm.cdf(d1(w_val, k)) - strike * norm.cdf(d2(w_val, k))))
+        price = spot_price * np.exp(-borrow * tte_years) * norm.cdf(d1(w_val, k)) - strike * DF * norm.cdf(d2(w_val, k))
     elif option_type == "put":
-        price = DF * (-(forward_price * norm.cdf(-d1(w_val, k)) - strike * norm.cdf(-d2(w_val, k))))
+        price = strike * DF * norm.cdf(-d2(w_val, k)) - spot_price * np.exp(-borrow * tte_years) * norm.cdf(-d1(w_val, k))
     else:
         raise ValueError(f"Invalid option_type: {option_type}. Must be 'call' or 'put'")
     return float(price)
