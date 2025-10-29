@@ -59,11 +59,12 @@ def calculate_relative_spread(mid_price: Optional[float], spread: Optional[float
     return None
 
 # Function to calculate forward price
-def calculate_forward_price(spot_price: float, risk_free_rate: float, tte_years: float) -> float:
+def calculate_forward_price(spot_price: float, risk_free_rate: float, tte_years: float, borrow: float) -> float:
     """
     Calculate the forward price of the underlying asset
     """
-    return spot_price * np.power(1.0 + (risk_free_rate), tte_years)
+    p = np.log(1 + risk_free_rate)
+    return spot_price * np.exp((p - borrow) * tte_years)
 
 # Function to calculate moneyness
 def calculate_moneyness(forward_price: float, strike: float) -> float:
@@ -89,4 +90,3 @@ def calculate_intrinsic_value(forward_price: float, strike: float, option_type: 
     elif option_type == "put":
         return max(0.0, strike - forward_price)
     return 0.0
-
