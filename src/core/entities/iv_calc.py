@@ -1,0 +1,93 @@
+from dataclasses import dataclass
+import warnings
+from typing import Any, Optional
+import numpy as np
+from scipy.optimize import brentq
+from black_scholes import black_scholes
+from src.filters.option_filters import valid_price, valid_obj_func, valid_iv
+
+tol = 1e-6
+LOW_VOL = 1e-4
+HIGH_VOL = 4.0
+BORROW = 0.0
+
+class IVCalc:
+    def __init__(self, market_price: float, forward_price: float, strike: float, tte_years: float, r: float, option_type: str, k: float, sigma: float):
+        self.sigma = sigma
+        self.market_price = market_price
+        self.forward_price = forward_price
+        self.strike = strike
+        self.tte_years = tte_years
+        self.r = r
+        self.option_type = option_type
+        self.k = k
+        self.low_vol = LOW_VOL
+        self.high_vol = HIGH_VOL
+
+    def objective_func(self, vol) -> float:
+        # Return large value for invalid sigma to guide solver
+        if self.sigma <= 0:
+            return 1e10
+        model_price = black_scholes(self.forward_price, self.strike, self.tte_years, vol, self.r, self.option_type, self.k, BORROW)
+            # Check if model price is NaN (can happen from black_scholes)
+        if np.isnan(model_price):
+            return 1e11 # Indicate error
+        return model_price - self.market_price
+
+    def calculate_iv(self, low_vol, high_vol) -> Optional[float]:
+        """
+        Calculate implied volatility using Brent's method
+        """
+        try:
+            iv = brentq(self.objective_func, low_vol, high_vol, xtol=tol, rtol=tol, full_output=False)
+            return iv
+        except ValueError:
+            # Could not find a root in the given interval
+            return None
+
+    def adjust_iv_limit(self, obj_low, obj_high):
+        """
+        Adjust the limits for implied volatility calculation
+        """
+        if abs(obj_low) < abs(obj_high): # Market price closer to low vol price
+            high_vol_adj = self.high_vol * 1.5
+            obj_high_adj = self.objective_func(high_vol_adj)
+            if np.sign(obj_low) != np.sign(obj_high_adj):
+                self.high_vol = high_vol_adj
+
+        else: # Market price closer to high vol price
+            low_vol_adj = self.low_vol * 0.5
+            obj_low_adj = self.objective_func(low_vol_adj)
+            if np.sign(obj_low_adj) != np.sign(obj_high):
+                self.low_vol = low_vol_adj
+    
+    def iv_calculator(self) -> Optional[float]:
+        """
+        Main method to calculate implied volatility
+        """
+        # Calculate objective function values at initial vol limits
+        obj_low = self.objective_func(self.low_vol)
+        obj_high = self.objective_func(self.high_vol)
+
+        # Calculate price at low and high vol for validation
+        price_at_low_vol = black_scholes(self.forward_price, self.strike, self.tte_years, self.low_vol, self.r, self.option_type, self.k, BORROW)
+        price_at_high_vol = black_scholes(self.forward_price, self.strike, self.tte_years, self.high_vol, self.r, self.option_type, self.k, BORROW)
+
+        # Validate IV bounds
+        if not valid_obj_func(obj_low, obj_high):
+            return None
+        if not valid_price(self.market_price, price_at_low_vol, price_at_high_vol):
+            return None
+        
+        if np.sign(obj_low) == np.sign(obj_high):
+            self.adjust_iv_limit(obj_low, obj_high) # Try adjusting limits
+            # Recalculate objective function values after adjustment
+            obj_low = self.objective_func(self.low_vol)
+            obj_high = self.objective_func(self.high_vol)
+
+        iv = self.calculate_iv(self.low_vol, self.high_vol)
+    
+        if not valid_iv(iv, self.low_vol, self.high_vol):
+            return None
+        
+        return iv
