@@ -24,11 +24,27 @@ def option_lower_than_underlying(mid, spot_price, option_type):
         return True
     return False
 
-def valid_iv(market_price, price_at_low_vol, price_at_high_vol):
+def valid_price(market_price, price_at_low_vol, price_at_high_vol):
     """
     Check if implied volatility is within valid range
     """
     if market_price is not None and price_at_low_vol is not None and price_at_high_vol is not None:
         if price_at_low_vol <= market_price <= price_at_high_vol:
             return True
+    return False
+
+def valid_obj_func(obj_low, obj_high):
+    """
+    Check if objective function values have opposite signs
+    """
+    if obj_low or obj_high > 1e9:
+        return False
+    return True
+
+def valid_iv(iv, low_vol, high_vol):
+    """
+    Check if implied volatility is within valid range
+    """
+    if iv is not None and low_vol < iv < high_vol:
+        return True
     return False
