@@ -5,12 +5,13 @@ from sklearn.metrics import mean_squared_error
 from typing import Tuple
 
 class SVI:
-    def __init__(self, par: Tuple[float, float, float, float, float], k: np.ndarray, weights: np.ndarray, method: str, w: np.ndarray):
+    def __init__(self, par: Tuple[float, float, float, float, float], k: np.ndarray, weights: np.ndarray, method: str, w: np.ndarray, tte_years: float):
         self.par = par
         self.k = k
         self.weights = weights
         self.method = method
         self.w = w
+        self.tte_years = tte_years
 
     def raw_svi(self):
         """
@@ -24,6 +25,23 @@ class SVI:
         a, b, rho, m, sigma = self.par
         w = a + b * (rho * (self.k - m) + np.sqrt((self.k - m) ** 2 + sigma ** 2))
         return w
+
+    def jw_par(self):
+        """
+        Returns a set of parameters from JW SVI parametrization at given moneyness points.
+        @param par: Set of raw parameters, (a, b, rho, m, sigma)
+        @type k: PdSeries
+        @param k: Moneyness points to evaluate
+        @return: Total variance
+        """
+        a, b, rho, m, sigma = self.par
+        vt = (a + b * (- rho * m + np.sqrt(m ** 2 + sigma ** 2)))/self.tte_years
+        psi = 0.5 * b * (- m / np.sqrt(m ** 2 + sigma ** 2) + rho)/np.sqrt(vt*self.tte_years)
+        pt = b * (1 - rho)/np.sqrt(vt*self.tte_years)
+        ct = b * (1 + rho)/np.sqrt(vt*self.tte_years)
+        vhat = (a + b * (sigma * + np.sqrt(1 - rho**2)))/self.tte_years
+        jw_par = vt, psi, pt, ct, vhat
+        return jw_par
 
 
     def diff_svi(self):
