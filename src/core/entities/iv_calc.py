@@ -3,7 +3,7 @@ import warnings
 from typing import Any, Optional
 import numpy as np
 from scipy.optimize import brentq
-from black_scholes import black_scholes
+from src.core.entities.black_scholes import black_scholes
 from src.filters.option_filters import valid_price, valid_obj_func, valid_iv
 
 tol = 1e-6
@@ -12,10 +12,11 @@ HIGH_VOL = 4.0
 BORROW = 0.0
 
 class IVCalc:
-    def __init__(self, market_price: float, forward_price: float, strike: float, tte_years: float, r: float, option_type: str, k: float, sigma: float):
+    def __init__(self, market_price: float, forward_price: float, spot_price: float, strike: float, tte_years: float, r: float, option_type: str, k: float, sigma: float):
         self.sigma = sigma
         self.market_price = market_price
         self.forward_price = forward_price
+        self.spot_price = spot_price
         self.strike = strike
         self.tte_years = tte_years
         self.r = r
@@ -27,20 +28,28 @@ class IVCalc:
     def objective_func(self, vol) -> float:
         # Return large value for invalid sigma to guide solver
         if self.sigma <= 0:
+            print("Invalid sigma value")
             return 1e10
-        model_price = black_scholes(self.forward_price, self.strike, self.tte_years, vol, self.r, self.option_type, self.k, BORROW)
+        model_price = black_scholes(self.spot_price, self.strike, self.tte_years, vol, self.r, self.option_type, self.k, BORROW)
             # Check if model price is NaN (can happen from black_scholes)
         if np.isnan(model_price):
+            print("Model price calculation resulted in NaN")
             return 1e11 # Indicate error
-        return model_price - self.market_price
+        # print(f"Vol: {vol}, Model Price: {model_price}, Market Price: {self.market_price}")
+        error = model_price - self.market_price
+        # print(f"Objective Function Error: {error}")
+        return error
 
-    def calculate_iv(self, low_vol, high_vol) -> Optional[float]:
+    def calculate_iv(self, low_vol, high_vol) -> float | None:
         """
         Calculate implied volatility using Brent's method
         """
         try:
-            iv = brentq(self.objective_func, low_vol, high_vol, xtol=tol, rtol=tol, full_output=False)
-            return iv
+            iv = brentq(self.objective_func, low_vol, high_vol, xtol=tol, rtol=np.float64(tol), full_output=False)
+            if isinstance(iv, float):
+                return iv
+            else:
+                return None
         except ValueError:
             # Could not find a root in the given interval
             return None
@@ -70,13 +79,15 @@ class IVCalc:
         obj_high = self.objective_func(self.high_vol)
 
         # Calculate price at low and high vol for validation
-        price_at_low_vol = black_scholes(self.forward_price, self.strike, self.tte_years, self.low_vol, self.r, self.option_type, self.k, BORROW)
-        price_at_high_vol = black_scholes(self.forward_price, self.strike, self.tte_years, self.high_vol, self.r, self.option_type, self.k, BORROW)
+        price_at_low_vol = black_scholes(self.spot_price, self.strike, self.tte_years, self.low_vol, self.r, self.option_type, self.k, BORROW)
+        price_at_high_vol = black_scholes(self.spot_price, self.strike, self.tte_years, self.high_vol, self.r, self.option_type, self.k, BORROW)
 
         # Validate IV bounds
         if not valid_obj_func(obj_low, obj_high):
+            # print("Invalid objective function values for IV calculation")
             return None
         if not valid_price(self.market_price, price_at_low_vol, price_at_high_vol):
+            # print("Invalid price range for IV calculation")
             return None
         
         if np.sign(obj_low) == np.sign(obj_high):
@@ -88,6 +99,7 @@ class IVCalc:
         iv = self.calculate_iv(self.low_vol, self.high_vol)
     
         if not valid_iv(iv, self.low_vol, self.high_vol):
+            print("Invalid implied volatility calculation")
             return None
         
         return iv
