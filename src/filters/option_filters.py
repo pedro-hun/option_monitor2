@@ -37,7 +37,8 @@ def valid_obj_func(obj_low, obj_high):
     """
     Check if objective function values have opposite signs
     """
-    if obj_low or obj_high > 1e9:
+    if obj_low > 1e9 or obj_high > 1e9:
+        print("Invalid objective function values for IV calculation")
         return False
     return True
 
