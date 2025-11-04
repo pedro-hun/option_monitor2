@@ -56,11 +56,11 @@ class BasicFilters:
 
     def apply_filters(self) -> pd.DataFrame:
         self.df["mask1"] = self.df.apply(lambda row: option_data_positive(bid=row["bid"], ask=row["ask"], tte_years=row["TTE_years"], iv=row["IV"]), axis=1)
-        self.df["mask2"] = self.df.apply(lambda row: intrinsic_lower_than_price(intrinsic_value=row["IntrinsicValue"], mid_price=row["MidPrice"]), axis=1)
+        # self.df["mask2"] = self.df.apply(lambda row: intrinsic_lower_than_price(intrinsic_value=row["IntrinsicValue"], mid_price=row["MidPrice"]), axis=1)
         self.df["mask3"] = self.df.apply(lambda row: option_lower_than_underlying(mid=row["MidPrice"], spot_price=row["SpotPrice"], option_type=row["OptionType"]), axis=1)
         
-        filtered_df = self.df[self.df["mask1"] & self.df["mask2"] & self.df["mask3"]].drop(columns=["mask1", "mask2", "mask3"]).copy()
-
+        # filtered_df = self.df[self.df["mask1"] & self.df["mask2"] & self.df["mask3"]].drop(columns=["mask1", "mask2", "mask3"]).copy()
+        filtered_df = self.df[self.df["mask1"] & self.df["mask3"]].drop(columns=["mask1", "mask3"]).copy()
         return filtered_df
     
 class GreeksCalc:
