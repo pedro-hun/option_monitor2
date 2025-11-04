@@ -33,7 +33,7 @@ class IVCalc:
         model_price = black_scholes(self.spot_price, self.strike, self.tte_years, vol, self.r, self.option_type, self.k, BORROW)
             # Check if model price is NaN (can happen from black_scholes)
         if np.isnan(model_price):
-            print("Model price calculation resulted in NaN")
+            # print("Model price calculation resulted in NaN")
             return 1e11 # Indicate error
         # print(f"Vol: {vol}, Model Price: {model_price}, Market Price: {self.market_price}")
         error = model_price - self.market_price
@@ -49,9 +49,11 @@ class IVCalc:
             if isinstance(iv, float):
                 return iv
             else:
+                # print("IV calculation did not return a float")
                 return None
         except ValueError:
             # Could not find a root in the given interval
+            # print("IV calculation failed: ValueError in root finding")
             return None
 
     def adjust_iv_limit(self, obj_low, obj_high):
@@ -84,10 +86,10 @@ class IVCalc:
 
         # Validate IV bounds
         if not valid_obj_func(obj_low, obj_high):
-            # print("Invalid objective function values for IV calculation")
+            print("Invalid objective function values for IV calculation")
             return None
         if not valid_price(self.market_price, price_at_low_vol, price_at_high_vol):
-            # print("Invalid price range for IV calculation")
+            print("Invalid price range for IV calculation")
             return None
         
         if np.sign(obj_low) == np.sign(obj_high):
