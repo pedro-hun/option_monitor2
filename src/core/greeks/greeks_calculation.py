@@ -2,7 +2,7 @@ from src.core.entities.black_scholes import d1, d2, discount_factor
 from scipy.stats import norm
 import numpy as np
 
-def vega(spot_price: float, tte_years: float, d1: float, borrow: float) -> float:
+def vega(spot_price: float, tte_years: float, d1: float, borrow: float = 0) -> float:
     """
     Calculate Black-Scholes vega from spot price and d1
     """
