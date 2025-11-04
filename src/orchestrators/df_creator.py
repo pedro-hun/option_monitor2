@@ -46,7 +46,7 @@ class DataFrameCreator:
         data['ForwardPrice'] = data.apply(lambda row: calculate_forward_price(spot_price=row['SpotPrice'], risk_free_rate=0.15, tte_years=row['TTE_years'], borrow=0), axis=1)
         data['Moneyness'] = data.apply(lambda row: calculate_moneyness(forward_price=row['ForwardPrice'], strike=row['Strike']), axis=1)
         data['LogMoneyness'] = data["Moneyness"].apply(lambda x: float(calculate_log_moneyness(moneyness=x)))
-        data["IntrinsicValue"] = data.apply(lambda row: calculate_intrinsic_value(forward_price=row['ForwardPrice'], strike=row['Strike'], option_type=row['OptionType']), axis=1)
+        data["IntrinsicValue"] = data.apply(lambda row: calculate_intrinsic_value(spot_price=row['SpotPrice'], strike=row['Strike'], option_type=row['OptionType'], r=0.15), axis=1)
         
         return data
 
