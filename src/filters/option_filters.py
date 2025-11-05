@@ -6,7 +6,7 @@ def option_data_positive(bid, ask, tte_years, iv):
         return False
     return True
 
-def intrinsic_lower_than_price(intrinsic_value, mid_price):
+def intrinsic_lower_than_price(intrinsic_value, mid_price, tol = 0.005):
     """
     Check if intrinsic value is lower than mid price
     """
@@ -14,15 +14,16 @@ def intrinsic_lower_than_price(intrinsic_value, mid_price):
         return True
     return False
 
-def option_lower_than_underlying(mid, spot_price, option_type):
+def option_lower_than_underlying(mid, spot_price, strike, tte_years, option_type, r=0.15):
     """
     Check if option is bigger than underlying price based on option type
     """
-    if option_type == "call" and mid <= spot_price:
-        return True
-    elif option_type == "put" and mid >= spot_price:
-        return True
-    return False
+    DF = 1/(1 + r)**tte_years
+    if option_type == "call" and mid >= spot_price:
+        return False
+    elif option_type == "put" and mid >= strike * DF:
+        return False
+    return True
 
 def valid_price(market_price, price_at_low_vol, price_at_high_vol):
     """
