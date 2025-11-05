@@ -46,7 +46,7 @@ class DataFrameCreator:
         data['ForwardPrice'] = data.apply(lambda row: calculate_forward_price(spot_price=row['SpotPrice'], risk_free_rate=0.15, tte_years=row['TTE_years'], borrow=0), axis=1)
         data['Moneyness'] = data.apply(lambda row: calculate_moneyness(forward_price=row['ForwardPrice'], strike=row['Strike']), axis=1)
         data['LogMoneyness'] = data["Moneyness"].apply(lambda x: float(calculate_log_moneyness(moneyness=x)))
-        data["IntrinsicValue"] = data.apply(lambda row: calculate_intrinsic_value(spot_price=row['SpotPrice'], strike=row['Strike'], option_type=row['OptionType'], r=0.15), axis=1)
+        data["IntrinsicValue"] = data.apply(lambda row: calculate_intrinsic_value(spot_price=row['SpotPrice'], strike=row['Strike'], option_type=row['OptionType']), axis=1)
         
         return data
 
@@ -55,13 +55,13 @@ class BasicFilters:
         self.df = df
 
     def apply_filters(self) -> pd.DataFrame:
-        self.df["mask1"] = self.df.apply(lambda row: option_data_positive(bid=row["bid"], ask=row["ask"], tte_years=row["TTE_years"], iv=row["IV"]), axis=1)
-        # self.df["mask2"] = self.df.apply(lambda row: intrinsic_lower_than_price(intrinsic_value=row["IntrinsicValue"], mid_price=row["MidPrice"]), axis=1)
-        self.df["mask3"] = self.df.apply(lambda row: option_lower_than_underlying(mid=row["MidPrice"], spot_price=row["SpotPrice"], option_type=row["OptionType"]), axis=1)
+        self.df["mask_data_positive"] = self.df.apply(lambda row: option_data_positive(bid=row["bid"], ask=row["ask"], tte_years=row["TTE_years"], iv=row["IV"]), axis=1)
+        self.df["mask_intrinsic"] = self.df.apply(lambda row: intrinsic_lower_than_price(intrinsic_value=row["IntrinsicValue"], mid_price=row["MidPrice"]), axis=1)
+        self.df["mask_underlying"] = self.df.apply(lambda row: option_lower_than_underlying(mid=row["MidPrice"], spot_price=row["SpotPrice"], strike=row["Strike"], tte_years=row["TTE_years"], option_type=row["OptionType"]), axis=1)
         
-        # filtered_df = self.df[self.df["mask1"] & self.df["mask2"] & self.df["mask3"]].drop(columns=["mask1", "mask2", "mask3"]).copy()
-        filtered_df = self.df[self.df["mask1"] & self.df["mask3"]].drop(columns=["mask1", "mask3"]).copy()
+        filtered_df = self.df[self.df["mask_data_positive"] & self.df["mask_intrinsic"] & self.df["mask_underlying"]].drop(columns=["mask_data_positive", "mask_intrinsic", "mask_underlying"]).copy()
         return filtered_df
+        # return self.df
     
 class GreeksCalc:
     def __init__(self, df: pd.DataFrame):
@@ -110,13 +110,10 @@ class DFCreator:
         self.filtered_df["D2"] = self.filtered_df.apply(lambda row: d2(w=row["W"], k=row["LogMoneyness"]), axis=1)
         self.filtered_df["BSPrice"] = self.filtered_df.apply(lambda row: black_scholes(
             spot_price=row["SpotPrice"],
-            strike=row["Strike"],
             tte_years=row["TTE_years"],
             iv=row["CalcIV"],
-            r=0.15,
             option_type=row["OptionType"],
             k=row["LogMoneyness"],
-            borrow=0
         ), axis=1)
         return self.filtered_df
     
