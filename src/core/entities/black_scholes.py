@@ -18,9 +18,7 @@ def d1(w: float, k: float) -> float:
     @param k: Moneyness points to evaluate
     @return: Values of d1 evaluated at k points
     """
-    # if w == 0:
-    #     print(w)
-    #     return np.array([])
+
     v = np.sqrt(w)
     return -k/v + 0.5*v
 
@@ -42,16 +40,15 @@ def discount_factor(r: float, tte_years: float) -> float:
     """
     return (1 + r) ** (-tte_years)
 
-def black_scholes(spot_price: float, strike: float, tte_years: float, iv: float | float, r: float, option_type: str, k: float, borrow: float) -> float:
+def black_scholes(spot_price: float, tte_years: float, iv: float, option_type: str, k: float) -> float:
     """
     Calculate Black-Scholes price from forward price and implied volatility
     """
-    DF = discount_factor(r, tte_years)
     w_val = w(iv, tte_years)
     if option_type == "call":
-        price = spot_price * np.exp(-borrow * tte_years) * norm.cdf(d1(w_val, k)) - strike * DF * norm.cdf(d2(w_val, k))
+        price = spot_price *  (norm.cdf(d1(w_val, k)) - np.exp(k) * norm.cdf(d2(w_val, k)))
     elif option_type == "put":
-        price = strike * DF * norm.cdf(-d2(w_val, k)) - spot_price * np.exp(-borrow * tte_years) * norm.cdf(-d1(w_val, k))
+        price = spot_price * (np.exp(k) * norm.cdf(-d2(w_val, k)) - norm.cdf(-d1(w_val, k)))
     else:
         raise ValueError(f"Invalid option_type: {option_type}. Must be 'call' or 'put'")
     return price
