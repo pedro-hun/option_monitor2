@@ -27,10 +27,10 @@ class IVCalc:
 
     def objective_func(self, vol) -> float:
         # Return large value for invalid sigma to guide solver
-        if self.sigma <= 0:
+        if vol <= 0:
             print("Invalid sigma value")
             return 1e10
-        model_price = black_scholes(self.spot_price, self.strike, self.tte_years, vol, self.r, self.option_type, self.k, BORROW)
+        model_price = black_scholes(spot_price=self.spot_price, tte_years=self.tte_years, iv=vol, option_type=self.option_type, k=self.k)
             # Check if model price is NaN (can happen from black_scholes)
         if np.isnan(model_price):
             # print("Model price calculation resulted in NaN")
@@ -61,16 +61,20 @@ class IVCalc:
         Adjust the limits for implied volatility calculation
         """
         if abs(obj_low) < abs(obj_high): # Market price closer to low vol price
-            high_vol_adj = self.high_vol * 1.5
+            high_vol_adj = self.high_vol * 3
             obj_high_adj = self.objective_func(high_vol_adj)
             if np.sign(obj_low) != np.sign(obj_high_adj):
                 self.high_vol = high_vol_adj
+            else:
+                print("Could not adjust IV limits to bracket root")
 
         else: # Market price closer to high vol price
-            low_vol_adj = self.low_vol * 0.5
+            low_vol_adj = self.low_vol * 0.2
             obj_low_adj = self.objective_func(low_vol_adj)
             if np.sign(obj_low_adj) != np.sign(obj_high):
                 self.low_vol = low_vol_adj
+            else:
+                print("Could not adjust IV limits to bracket root")
     
     def iv_calculator(self) -> Optional[float]:
         """
@@ -81,16 +85,21 @@ class IVCalc:
         obj_high = self.objective_func(self.high_vol)
 
         # Calculate price at low and high vol for validation
-        price_at_low_vol = black_scholes(self.spot_price, self.strike, self.tte_years, self.low_vol, self.r, self.option_type, self.k, BORROW)
-        price_at_high_vol = black_scholes(self.spot_price, self.strike, self.tte_years, self.high_vol, self.r, self.option_type, self.k, BORROW)
+        price_at_low_vol = black_scholes(spot_price=self.spot_price, tte_years=self.tte_years, iv=self.low_vol, option_type=self.option_type, k=self.k)
+        price_at_high_vol = black_scholes(spot_price=self.spot_price, tte_years=self.tte_years, iv=self.high_vol, option_type=self.option_type, k=self.k)
 
         # Validate IV bounds
         if not valid_obj_func(obj_low, obj_high):
             print("Invalid objective function values for IV calculation")
             return None
         if not valid_price(self.market_price, price_at_low_vol, price_at_high_vol):
-            print("Invalid price range for IV calculation")
-            return None
+            self.adjust_iv_limit(obj_low, obj_high)
+            adj_price_at_low_vol = black_scholes(spot_price=self.spot_price, tte_years=self.tte_years, iv=self.low_vol, option_type=self.option_type, k=self.k)
+            adj_price_at_high_vol = black_scholes(spot_price=self.spot_price, tte_years=self.tte_years, iv=self.high_vol, option_type=self.option_type, k=self.k)
+            if not valid_price(self.market_price, adj_price_at_low_vol, adj_price_at_high_vol):
+                print(f"Market Price: {self.market_price}, Price at Low Vol: {adj_price_at_low_vol}, Price at High Vol: {adj_price_at_high_vol} for strike {self.strike}")
+                print("Invalid price range for IV calculation")
+                return None
         
         if np.sign(obj_low) == np.sign(obj_high):
             self.adjust_iv_limit(obj_low, obj_high) # Try adjusting limits
