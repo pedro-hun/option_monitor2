@@ -94,14 +94,15 @@ def calculate_log_moneyness(moneyness: float) -> float:
         return -np.inf
     return np.log(moneyness)
 
+
+#TODO: Review if i shoud calculate intrinsic value based on the option strike or present value of the strike
 # Function to calculate intrinsic value
-def calculate_intrinsic_value(spot_price: float, strike: float, option_type: Optional[str], r: float = 0.15) -> float:
+def calculate_intrinsic_value(spot_price: float, strike: float, option_type: Optional[str]) -> float:
     """
     Calculate the intrinsic value of the option
     """
-    DF = (1/(1 + r)) 
     if option_type == "call":
-        return np.maximum(0.0, spot_price - strike*DF)
+        return np.maximum(0.0, spot_price - strike)
     elif option_type == "put":
-        return np.maximum(0.0, strike*DF - spot_price)
+        return np.maximum(0.0, strike - spot_price)
     return 0.0
