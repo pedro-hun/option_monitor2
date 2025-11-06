@@ -19,12 +19,12 @@ from src.data_fetchers.excel_reader import ExcelReader, ExcelReaderConfig
 from src.data_fetchers.holiday_df_reader import Holidays
 from src.filters.option_filters import option_data_positive, intrinsic_lower_than_price, option_lower_than_underlying, valid_price, valid_obj_func, valid_iv
 from src.utils.option_data_calc import get_type, calculate_tte_days, calculate_tte_years, calculate_mid_price, calculate_bid_ask_spread, calculate_relative_spread, calculate_forward_price, calculate_moneyness, calculate_log_moneyness, calculate_intrinsic_value
-from src.core.entities.black_scholes import black_scholes, w, d1, d2, discount_factor
+from src.core.entities.black_scholes import black_scholes, black_scholes_og, w, d1, d2, discount_factor
 from src.core.greeks.greeks_calculation import vega, theta, rho, delta, gamma
 
 
 holidays = Holidays()
-excel_reader_config = ExcelReaderConfig(excel_file="C:/Users/pedro.hun/Documents/repos/option_monitor2/examples/data/petr_options_chain_test.xlsx", sheet_name="Sheet1", iv_col="I", start_row=2, end_row=557, bid_col="E", ask_col="F", last_price_col="B", strike_col="C", open_interest_col="H", volume_col="D", ticker_col="A", maturity_col="G", spot_price_col="J")
+excel_reader_config = ExcelReaderConfig(excel_file="C:/Users/pedro.hun/Documents/repos/option_monitor2/examples/data/petr_options_chain_4.xlsx", sheet_name="Sheet1", iv_col="I", start_row=2, end_row=1925, bid_col="E", ask_col="F", last_price_col="B", strike_col="C", open_interest_col="H", volume_col="D", ticker_col="A", maturity_col="G", spot_price_col="J")
 
 
 
@@ -102,19 +102,43 @@ class DFCreator:
             sigma=row["IV"]
         ).iv_calculator(), axis=1)
         return self.filtered_df
-    
-    def apply_bs(self):
+
+    def apply_iv_calc_og(self):
         self.filtered_df = self.apply_iv_calc().copy()
-        self.filtered_df["W"] = self.filtered_df.apply(lambda row: w(iv=row["CalcIV"], tte_years=row["TTE_years"]), axis=1)
+        self.filtered_df["CalcIVOG"] = self.filtered_df.apply(lambda row: IVCalc(
+            market_price=row["MidPrice"],
+            forward_price=row["ForwardPrice"],
+            spot_price=row["SpotPrice"],
+            strike=row["Strike"],
+            tte_years=row["TTE_years"],
+            option_type=row["OptionType"],
+            k=row["LogMoneyness"],
+            r=0.15,
+            sigma=row["IV"]
+        ).iv_calculator_og(), axis=1)
+        return self.filtered_df
+
+    def apply_bs(self):
+        self.filtered_df = self.apply_iv_calc_og().copy()
+        self.filtered_df["W"] = self.filtered_df.apply(lambda row: w(iv=row["CalcIVOG"], tte_years=row["TTE_years"]), axis=1)
         self.filtered_df["D1"] = self.filtered_df.apply(lambda row: d1(w=row["W"], k=row["LogMoneyness"]), axis=1)
         self.filtered_df["D2"] = self.filtered_df.apply(lambda row: d2(w=row["W"], k=row["LogMoneyness"]), axis=1)
         self.filtered_df["BSPrice"] = self.filtered_df.apply(lambda row: black_scholes(
             spot_price=row["SpotPrice"],
             tte_years=row["TTE_years"],
-            iv=row["CalcIV"],
+            iv=row["IV"],
             option_type=row["OptionType"],
             k=row["LogMoneyness"],
         ), axis=1)
+        self.filtered_df["BSPriceOG"] = self.filtered_df.apply(lambda row: black_scholes_og(
+            spot_price=row["SpotPrice"],
+            strike=row["Strike"],
+            tte_years=row["TTE_years"],
+            iv=row["IV"],
+            option_type=row["OptionType"],
+            r=0.15
+        ), axis=1)
+
         return self.filtered_df
     
     def apply_greeks(self):
