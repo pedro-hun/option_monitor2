@@ -25,6 +25,7 @@ class SingleExpiry:
             params = svi_fit_direct(
                 k=self.single_df["LogMoneyness"].to_numpy(), 
                 w=self.single_df["W"].to_numpy(), 
+
                 weights=self.single_df["Vega"].to_numpy(), 
                 method="Nelder-Mead", 
                 ngrid=5
@@ -61,8 +62,14 @@ class SingleExpiry:
             plt.figure(figsize=(12, 8))
 
             # Market data points (scattered)
-            plt.scatter(self.single_df["LogMoneyness"], self.single_df["CalcIV"],
-                       label="Market IV", color='blue', alpha=0.7, s=60, zorder=5)
+            # plt.scatter(self.single_df["LogMoneyness"], self.single_df["CalcIV"],
+            #            label="Market IV", color='blue', alpha=0.7, s=60, zorder=5)
+            
+            # plt.scatter(self.single_df["LogMoneyness"], self.single_df["IV"],
+            #            label="Original Market IV", color='green', alpha=0.7, s=60, zorder=5)
+            
+            plt.scatter(self.single_df["LogMoneyness"], self.single_df["CalcIVOG"],
+                       label="IV OG", color='orange', alpha=0.7, s=60, zorder=5)
 
             # SVI fitted curve (smooth line)
             plt.plot(k_smooth, iv_smooth, label="SVI Fit", color='red', linewidth=2, zorder=4)
