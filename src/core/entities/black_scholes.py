@@ -53,6 +53,25 @@ def black_scholes(spot_price: float, tte_years: float, iv: float, option_type: s
         raise ValueError(f"Invalid option_type: {option_type}. Must be 'call' or 'put'")
     return price
 
+def black_scholes_og(spot_price: float, strike: float, tte_years: float, iv: float, option_type: str, r: float) -> float:
+    """
+    Calculate Black-Scholes price from spot price, strike price, time to expiration, implied volatility, option type and risk-free rate
+
+    """
+    p = np.log(1 + r)
+    d1_val = (np.log(spot_price / strike) + (p + 0.5 * iv ** 2) * tte_years) / (iv * np.sqrt(tte_years))
+    d2_val = d1_val - iv * np.sqrt(tte_years)
+    DF = discount_factor(r, tte_years)
+    
+    if option_type == "call":
+        price = spot_price * norm.cdf(d1_val) - strike * DF * norm.cdf(d2_val)
+    elif option_type == "put":
+        price = strike * DF * norm.cdf(-d2_val) - spot_price * norm.cdf(-d1_val)
+    else:
+        raise ValueError(f"Invalid option_type: {option_type}. Must be 'call' or 'put'")
+    return float(price)
+
+
 if __name__ == "__main__":
     import pandas as pd
 
