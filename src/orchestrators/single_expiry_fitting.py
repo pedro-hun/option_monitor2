@@ -1,6 +1,6 @@
 import pandas as pd
 from src.core.interpolation_single_expiry.svi import SVI
-from src.core.interpolation_single_expiry.svi_redo import raw_svi, svi_fit_direct
+from src.core.interpolation_single_expiry.svi_redo import density, gfun, raw_svi, svi_fit_direct
 from src.orchestrators.df_creator import DFCreator
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,7 +35,7 @@ class SingleExpiry:
             print(f"SVI fitting failed: {e}")
             raise
 
-    def create_data_points(self, params: Tuple, num_points: int = 100) -> Tuple[np.ndarray, np.ndarray]:
+    def create_data_points(self, params: Tuple, num_points: int = 100) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Create smooth curve points for plotting"""
         k_min = self.single_df["LogMoneyness"].min()
         k_max = self.single_df["LogMoneyness"].max()
@@ -46,18 +46,24 @@ class SingleExpiry:
         # Calculate total variance using SVI formula
         w_values = raw_svi(par=params, k=k_values)
 
+        # Calculate G function values
+        g_values = gfun(par=params, k=k_values)
+
+        # Calculate density values
+        dens_values = density(par=params, k=k_values)
+
         # Convert to implied volatility: σ = √(w/T)
         tte_years = self.single_df["TTE_years"].iloc[0]
         implied_vol = np.sqrt(w_values / tte_years)  # Fixed formula
         # implied_vol = np.sqrt(w_values)
 
-        return k_values, implied_vol
+        return k_values, implied_vol, g_values, dens_values
 
     def plot_svi(self):
         """Plot market data vs SVI fit"""
         try:
             params = self.fit_svi()
-            k_smooth, iv_smooth = self.create_data_points(params)
+            k_smooth, iv_smooth, g_smooth, dens_smooth = self.create_data_points(params)
 
             plt.figure(figsize=(12, 8))
 
@@ -93,6 +99,25 @@ class SingleExpiry:
 
         except Exception as e:
             print(f"Plotting failed: {e}")
+            raise
+
+        try:
+            plt.figure(figsize=(12, 8))
+
+            plt.plot(k_smooth, g_smooth, label="G Function", color='purple', linewidth=2, zorder=4)
+            plt.plot(k_smooth, dens_smooth, label="Density", color='green', linewidth=2, zorder=4)
+            plt.xlabel("Log Moneyness")
+            plt.ylabel("G(k)")
+
+            plt.title(f"G Function - {self.single_df['TTE_days'].iloc[0]} Days to Expiry")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            plt.show()
+
+        except Exception as e:
+            print(f"G Function Plotting failed: {e}")
             raise
 
 
