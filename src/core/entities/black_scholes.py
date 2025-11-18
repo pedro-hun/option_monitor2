@@ -32,26 +32,28 @@ def d2(w: float, k: float) -> float:
     v = np.sqrt(w)
     return -k/v - 0.5*v
 
-def discount_factor(r: float, tte_years: float) -> float:
+def discount_factor(tte_years: float, r: float = 0.15) -> float:
     """
     Calculate discount factor
     @param r: Risk-free interest rate
     @param tte_years: Time to expiration in years
     """
+    p = np.log(1 + r)
+    # return np.exp(-p * tte_years)
     return (1 + r) ** (-tte_years)
 
-def black_scholes(spot_price: float, tte_years: float, iv: float, option_type: str, k: float) -> float:
+def black_scholes(spot_price: float, tte_years: float, iv: float, option_type: str, k: float, strike: float ) -> float:
     """
     Calculate Black-Scholes price from forward price and implied volatility
     """
     w_val = w(iv, tte_years)
     if option_type == "call":
-        price = spot_price *  (norm.cdf(d1(w_val, k)) - np.exp(k) * norm.cdf(d2(w_val, k)))
+        price = spot_price *  (norm.cdf(d1(w=w_val, k=k)) -  strike * discount_factor(tte_years=tte_years)/spot_price * norm.cdf(d2(w=w_val, k=k)))
     elif option_type == "put":
-        price = spot_price * (np.exp(k) * norm.cdf(-d2(w_val, k)) - norm.cdf(-d1(w_val, k)))
+        price = spot_price * (strike * discount_factor(tte_years=tte_years)/spot_price * norm.cdf(-d2(w=w_val, k=k)) - norm.cdf(-d1(w=w_val, k=k)))
     else:
         raise ValueError(f"Invalid option_type: {option_type}. Must be 'call' or 'put'")
-    return price
+    return float(price)
 
 def black_scholes_og(spot_price: float, strike: float, tte_years: float, iv: float, option_type: str, r: float) -> float:
     """
@@ -61,7 +63,7 @@ def black_scholes_og(spot_price: float, strike: float, tte_years: float, iv: flo
     p = np.log(1 + r)
     d1_val = (np.log(spot_price / strike) + (p + 0.5 * iv ** 2) * tte_years) / (iv * np.sqrt(tte_years))
     d2_val = d1_val - iv * np.sqrt(tte_years)
-    DF = discount_factor(r, tte_years)
+    DF = discount_factor(tte_years)
     
     if option_type == "call":
         price = spot_price * norm.cdf(d1_val) - strike * DF * norm.cdf(d2_val)
