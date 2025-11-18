@@ -1,6 +1,7 @@
 import pandas as pd
 from src.core.interpolation_single_expiry.svi import SVI
 from src.core.interpolation_single_expiry.svi_redo import density, gfun, raw_svi, svi_fit_direct
+from src.core.interpolation_single_expiry.cubic_spline import cubic_spline_interpolator
 from src.orchestrators.df_creator import DFCreator
 import matplotlib.pyplot as plt
 import numpy as np
@@ -62,7 +63,8 @@ class SingleExpiry:
     def plot_svi(self):
         """Plot market data vs SVI fit"""
         try:
-            params = self.fit_svi()
+            # params = self.fit_svi()
+            params = tuple(self.single_df[["svi_a", "svi_b", "svi_rho", "svi_m", "svi_sigma"]].iloc[0].values)
             k_smooth, iv_smooth, g_smooth, dens_smooth = self.create_data_points(params)
 
             plt.figure(figsize=(12, 8))
@@ -71,14 +73,18 @@ class SingleExpiry:
             # plt.scatter(self.single_df["LogMoneyness"], self.single_df["CalcIV"],
             #            label="Market IV", color='blue', alpha=0.7, s=60, zorder=5)
             
-            # plt.scatter(self.single_df["LogMoneyness"], self.single_df["IV"],
-            #            label="Original Market IV", color='green', alpha=0.7, s=60, zorder=5)
+            plt.scatter(self.single_df["LogMoneyness"], self.single_df["IV"],
+                       label="Original Market IV", color='green', alpha=0.7, s=60, zorder=5)
             
             plt.scatter(self.single_df["LogMoneyness"], self.single_df["CalcIVOG"],
                        label="IV OG", color='orange', alpha=0.7, s=60, zorder=5)
 
             # SVI fitted curve (smooth line)
             plt.plot(k_smooth, iv_smooth, label="SVI Fit", color='red', linewidth=2, zorder=4)
+            plt.plot(k_smooth,cubic_spline_interpolator(
+                self.single_df["LogMoneyness"].to_numpy(),
+                self.single_df["CalcIVOG"].to_numpy()
+            )(k_smooth), label="Cubic Spline IV", color='blue', linewidth=2, zorder=4)
 
             plt.xlabel("Log Moneyness")
             plt.ylabel("Implied Volatility")
