@@ -18,6 +18,112 @@ def raw_svi(par, k):
     w = a + b * (rho * (k - m) + np.sqrt((k - m) ** 2 + sigma ** 2))
     return w
 
+def jw_par(a, b, rho, m, sigma, tte_years):
+    """
+    Returns a set of parameters from JW SVI parametrization at given moneyness points.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Total variance
+    """
+    vt = (a + b * (- rho * m + np.sqrt(m ** 2 + sigma ** 2)))/tte_years
+    psi = 0.5 * b * (- m / np.sqrt(m ** 2 + sigma ** 2) + rho)/np.sqrt(vt*tte_years)
+    pt = b * (1 - rho)/np.sqrt(vt*tte_years)
+    ct = b * (1 + rho)/np.sqrt(vt*tte_years)
+    vhat = (a + b * (sigma * np.sqrt(1 - rho**2)))/tte_years
+    jw_par = vt, psi, pt, ct, vhat
+    return jw_par
+
+def jw_vt(a, b, rho, m, sigma, tte_years):
+    """
+    Returns vt from JW SVI parametrization at given moneyness points.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Total variance
+    """
+    vt = (a + b * (- rho * m + np.sqrt(m ** 2 + sigma ** 2)))/tte_years
+    return vt
+
+def jw_psi(a, b, rho, m, sigma, tte_years):
+    """
+    Returns psi from JW SVI parametrization at given moneyness points.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Total variance
+    """
+    vt = (a + b * (- rho * m + np.sqrt(m ** 2 + sigma ** 2)))/tte_years
+    psi = 0.5 * b * (- m / np.sqrt(m ** 2 + sigma ** 2) + rho)/np.sqrt(vt*tte_years)
+    return psi
+
+def jw_pt(a, b, rho, m, sigma, tte_years):
+    """
+    Returns p_t from JW SVI parametrization at given moneyness points.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Total variance
+    """
+    vt = (a + b * (- rho * m + np.sqrt(m ** 2 + sigma ** 2)))/tte_years
+    pt = b * (1 - rho)/np.sqrt(vt*tte_years)
+    return pt
+
+def jw_ct(a, b, rho, m, sigma, tte_years):
+    """
+    Returns c_t from JW SVI parametrization at given moneyness points.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Total variance
+    """
+    vt = (a + b * (- rho * m + np.sqrt(m ** 2 + sigma ** 2)))/tte_years
+    ct = b * (1 + rho)/np.sqrt(vt*tte_years)
+    return ct
+
+def jw_vhat(a, b, rho, m, sigma, tte_years):
+    """
+    Returns vhat from JW SVI parametrization at given moneyness points.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Total variance
+    """
+    vhat = (a + b * (sigma * np.sqrt(1 - rho**2)))/tte_years
+    return vhat
+
+def delta_svi(a, b, rho, m, sigma):
+    """
+    Delta from the natural SVI parametrization.
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Delta evaluated at k points
+    """
+    omega_svi = 2*b*sigma/ (1 - rho**2)
+    return a - 0.5*omega_svi*(1 - rho**2)
+
+def mi_svi(a, b, rho, m, sigma):
+    """
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Minimum implied variance evaluated at k points
+    """
+    return m + rho*sigma/ np.sqrt(1 - rho**2)
+
+def omega_svi(a, b, rho, m, sigma):
+    """
+    @param par: Set of raw parameters, (a, b, rho, m, sigma)
+    @type k: PdSeries
+    @param k: Moneyness points to evaluate
+    @return: Omega parameter evaluated at k points
+    """
+    return 2*b*sigma/ (1 - rho**2)
+
+def zeta_svi(a, b, rho, m, sigma):
+
+    return (1 - rho**2)/ (sigma)
 
 def diff_svi(par, k):
     """
@@ -150,7 +256,7 @@ def svi_fit_direct(k, w, weights, method, ngrid=5):
             print(f"Warning: DE Optimization failed: {p0.message}")
         return p0
     else:
-        p0 = sop.minimize(obj_fun, x0=initial_guess, method=method, bounds=bounds, options={'maxiter':10000, 'ftol':1e-8, 'gtol':1e-7})
+        p0 = sop.minimize(obj_fun, x0=initial_guess, method=method, bounds=bounds, options={'maxiter':10000})
         if not p0.success:
             print(f"Warning: Minimize Optimization failed: {p0.message}")
         return p0
