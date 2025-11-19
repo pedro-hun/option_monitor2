@@ -21,6 +21,7 @@ from src.filters.option_filters import option_data_positive, intrinsic_lower_tha
 from src.utils.option_data_calc import get_type, calculate_tte_days, calculate_tte_years, calculate_mid_price, calculate_bid_ask_spread, calculate_relative_spread, calculate_forward_price, calculate_moneyness, calculate_log_moneyness, calculate_intrinsic_value
 from src.core.entities.black_scholes import black_scholes, black_scholes_og, w, d1, d2, discount_factor
 from src.core.greeks.greeks_calculation import vega, theta, rho, delta, gamma
+from src.core.interpolation_single_expiry.svi_redo import  mi_svi, omega_svi, svi_fit_direct, jw_vt, jw_psi, jw_pt, jw_ct, jw_vhat, delta_svi, zeta_svi
 
 
 holidays = Holidays()
@@ -70,10 +71,10 @@ class GreeksCalc:
     def calculate_greeks(self) -> pd.DataFrame:
         # Placeholder for greeks calculation logic
         self.df["Vega"] = self.df.apply(lambda row: vega(spot_price=row["SpotPrice"], tte_years=row["TTE_years"], d1=row["D1"], borrow=0), axis=1)
-        self.df["Theta"] = self.df.apply(lambda row: theta(spot_price=row["SpotPrice"], strike=row["Strike"], tte_years=row["TTE_years"], sigma=row["CalcIV"], d1=row["D1"], d2=row["D2"], r=0.15, option_type=row["OptionType"], borrow=0), axis=1)
+        self.df["Theta"] = self.df.apply(lambda row: theta(spot_price=row["SpotPrice"], strike=row["Strike"], tte_years=row["TTE_years"], sigma=row["CalcIVOG"], d1=row["D1"], d2=row["D2"], r=0.15, option_type=row["OptionType"], borrow=0), axis=1)
         self.df["Rho"] = self.df.apply(lambda row: rho(strike=row["Strike"], tte_years=row["TTE_years"], d2=row["D2"], r=0.15, option_type=row["OptionType"]), axis=1)
         self.df["Delta"] = self.df.apply(lambda row: delta(tte_years=row["TTE_years"], d1=row["D1"], option_type=row["OptionType"], borrow=0), axis=1)
-        self.df["Gamma"] = self.df.apply(lambda row: gamma(spot_price=row["SpotPrice"], tte_years=row["TTE_years"], sigma=row["CalcIV"], d1=row["D1"], borrow=0), axis=1)
+        self.df["Gamma"] = self.df.apply(lambda row: gamma(spot_price=row["SpotPrice"], tte_years=row["TTE_years"], sigma=row["CalcIVOG"], d1=row["D1"], borrow=0), axis=1)
         return self.df
     
 class DFCreator:
@@ -88,23 +89,23 @@ class DFCreator:
         return self.filtered_df
 
     
-    def apply_iv_calc(self):
-        self.filtered_df = self.create_filtered_dataframe().copy()
-        self.filtered_df["CalcIV"] = self.filtered_df.apply(lambda row: IVCalc(
-            market_price=row["MidPrice"],
-            forward_price=row["ForwardPrice"],
-            spot_price=row["SpotPrice"],
-            strike=row["Strike"],
-            tte_years=row["TTE_years"],
-            option_type=row["OptionType"],
-            k=row["LogMoneyness"],
-            r=0.15,
-            sigma=row["IV"]
-        ).iv_calculator(), axis=1)
-        return self.filtered_df
+    # def apply_iv_calc(self):
+    #     self.filtered_df = self.create_filtered_dataframe().copy()
+    #     self.filtered_df["CalcIV"] = self.filtered_df.apply(lambda row: IVCalc(
+    #         market_price=row["MidPrice"],
+    #         forward_price=row["ForwardPrice"],
+    #         spot_price=row["SpotPrice"],
+    #         strike=row["Strike"],
+    #         tte_years=row["TTE_years"],
+    #         option_type=row["OptionType"],
+    #         k=row["LogMoneyness"],
+    #         r=0.15,
+    #         sigma=row["IV"]
+    #     ).iv_calculator(), axis=1)
+    #     return self.filtered_df
 
     def apply_iv_calc_og(self):
-        self.filtered_df = self.apply_iv_calc().copy()
+        self.filtered_df = self.create_filtered_dataframe().copy()
         self.filtered_df["CalcIVOG"] = self.filtered_df.apply(lambda row: IVCalc(
             market_price=row["MidPrice"],
             forward_price=row["ForwardPrice"],
@@ -129,6 +130,7 @@ class DFCreator:
             iv=row["IV"],
             option_type=row["OptionType"],
             k=row["LogMoneyness"],
+            strike=row["Strike"]
         ), axis=1)
         self.filtered_df["BSPriceOG"] = self.filtered_df.apply(lambda row: black_scholes_og(
             spot_price=row["SpotPrice"],
@@ -146,11 +148,81 @@ class DFCreator:
         greeks_calculator = GreeksCalc(self.filtered_df)
         self.filtered_df = greeks_calculator.calculate_greeks()
         return self.filtered_df
+    
+    
+    
+    def calc_params(self) -> pd.DataFrame:
+        """Calculate SVI parameters for each expiry and add them to the dataframe"""
+        
+        self.filtered_df = self.apply_greeks().copy().dropna()
+        
+        
+        # Initialize parameter columns
+        self.filtered_df["svi_a"] = np.nan
+        self.filtered_df["svi_b"] = np.nan
+        self.filtered_df["svi_rho"] = np.nan
+        self.filtered_df["svi_m"] = np.nan
+        self.filtered_df["svi_sigma"] = np.nan
+        
+        for tte_days in self.filtered_df['TTE_days'].unique():
+            try:
+                print(f"Fitting SVI for TTE_days = {tte_days}")
+                if len(self.filtered_df[self.filtered_df["TTE_days"] == tte_days]) < 5:
+                    print(f"Skipping TTE_days = {tte_days} due to insufficient data points")
+                    continue
+                
+                # Filter data for this expiry
+                single_expiry_df = self.filtered_df.loc[self.filtered_df["TTE_days"] == tte_days].copy()
+                
+                
+                # Prepare data for SVI fitting
+                k_values = single_expiry_df["LogMoneyness"].to_numpy()
+                w_values = single_expiry_df["W"].to_numpy()
+                weights = single_expiry_df["Vega"].to_numpy()
 
-
-
-
-
+                # Debug the input data
+                print(f"k_values range: [{k_values.min():.4f}, {k_values.max():.4f}]")
+                print(f"w_values range: [{w_values.min():.4f}, {w_values.max():.4f}]")
+                print(f"weights range: [{weights.min():.4f}, {weights.max():.4f}]")            
+                
+                # Fit SVI using svi_fit_direct from svi_redo.py
+                result = svi_fit_direct(
+                    k=k_values,
+                    w=w_values,
+                    weights=weights,
+                    method="COBYQA",
+                    ngrid=5
+                )
+                
+                params = result.x
+                    
+                # Assign parameters to all rows with this expiry
+                self.filtered_df.loc[self.filtered_df["TTE_days"] == tte_days, "svi_a"] = params[0]
+                self.filtered_df.loc[self.filtered_df["TTE_days"] == tte_days, "svi_b"] = params[1]
+                self.filtered_df.loc[self.filtered_df["TTE_days"] == tte_days, "svi_rho"] = params[2]
+                self.filtered_df.loc[self.filtered_df["TTE_days"] == tte_days, "svi_m"] = params[3]
+                self.filtered_df.loc[self.filtered_df["TTE_days"] == tte_days, "svi_sigma"] = params[4]
+            except Exception as e:
+                print(f"Error fitting SVI for TTE_days = {tte_days}: {e}")
+                continue
+        return self.filtered_df
+    
+    def apply_jw(self) -> pd.DataFrame:
+        self.filtered_df = self.calc_params().copy()
+        self.filtered_df["vt"] = self.filtered_df.apply(lambda row: jw_vt(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"], tte_years=row["TTE_years"]), axis=1)
+        self.filtered_df["psi"] = self.filtered_df.apply(lambda row: jw_psi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"], tte_years=row["TTE_years"]), axis=1)
+        self.filtered_df["p_t"] = self.filtered_df.apply(lambda row: jw_pt(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"], tte_years=row["TTE_years"]), axis=1)
+        self.filtered_df["c_t"] = self.filtered_df.apply(lambda row: jw_ct(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"], tte_years=row["TTE_years"]), axis=1)
+        self.filtered_df["vhat"] = self.filtered_df.apply(lambda row: jw_vhat(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"], tte_years=row["TTE_years"]), axis=1)
+        return self.filtered_df
+    
+    def apply_natural(self) -> pd.DataFrame:
+        self.filtered_df = self.apply_jw().copy()
+        self.filtered_df["svi_delta"] = self.filtered_df.apply(lambda row: delta_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
+        self.filtered_df["svi_mi"] = self.filtered_df.apply(lambda row: mi_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
+        self.filtered_df["svi_omega"] = self.filtered_df.apply(lambda row: omega_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
+        self.filtered_df["svi_zeta"] = self.filtered_df.apply(lambda row: zeta_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
+        return self.filtered_df
 
 
 
