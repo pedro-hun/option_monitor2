@@ -37,7 +37,7 @@ def ssvi_fun(par, t, k, phitype):
     @param par: Parameters of the function in that order, (rho, sigma, gamma,
     [eta])
     @param t: Time to maturity
-    @param k: Forward log-moneyness
+    @param k: Forward log-moneynessCu
     @param phitype: Text string representing the type of phi function. One of
     "heston" or "powerlaw".
     @return: Values of SSVI function for the pair (theta, k), considering
@@ -188,62 +188,6 @@ def ssvi_local_vol(par, t, k, phitype):
 
     return np.sqrt(ssvi_difft(par, t, k, phitype) / ssvi_g(par, t, k, phitype))
 
-def ssvi_fit_direct(par, t, k, phitype):
-    
-    # Bounds on parameters
-    bounds = [(0., max(self.w)),
-            (0., None),
-            (-1., 1.),
-            (2*min(self.k), 2*max(self.k)),
-            (0., None)]
-    # Tuples for brute force
-    bfranges = tuple(bounds)
-
-    # Objective function using sklearn
-    def obj_fun():
-        return mean_squared_error(self.w, self.raw_svi(), sample_weight=self.weights)
-
-    # Chooses algo and run
-    if self.method == "brute":
-        # Brute force algo. fmin will take place to refine solution
-        p0 = sop.brute(obj_fun, bfranges, Ns=ngrid, full_output=True)
-        return p0
-    elif self.method == "DE":
-        # Differential Evolution algo.
-        p0 = sop.differential_evolution(obj_fun, bounds)
-        return p0
-    else:
-        p0 = sop.minimize(obj_fun, x0=[np.min(self.w), max(2*(np.max(self.w)-np.max(self.w))/((np.max(self.k) - np.min(self.k)))), np.sign(self.w[-1] - self.w[0])*0.5, self.k[np.argmin(self.w)], max((np.max(self.k) - np.min(self.k))/ 4.0, 0.05)], method=self.method, bounds=bounds)
-        return p0
 
 
 
-
-
-
-
-
-
-# Numerical examples as in Jacquier
-# rho, sigma, gamma, eta = -0.7, 0.2, 0.8, 1.
-# par_heston = [rho, sigma, gamma]
-# par_pl = [rho, sigma, gamma, eta]
-# t = 0.1
-# xx, TT = np.linspace(-1., 1., 50), np.linspace(0.001, 5., 50)
-
-# print("Arbitrage avoided in heston: ", gamma - 0.25*(1.+np.abs(rho)) >= 0.0)
-
-# loc_vol = [[ssvi_local_vol(par_heston, t, k, "heston") for k in xx] for t in TT]
-# loc_vol_np = np.array(loc_vol)
-
-# # Plot Local Volatility Surface
-# fig = plt.figure(figsize=(8, 5))
-# ax = fig.add_subplot(111, projection="3d")
-# xxx, TTT = np.meshgrid(xx, TT)
-# ax.plot_surface(xxx, TTT, loc_vol_np, cmap='viridis', rstride=1, cstride=1,
-#                 linewidth=0)
-# ax.set_xlabel("Forward log-moneyness")
-# ax.set_ylabel("Time to maturity")
-# ax.set_zlabel("Local volatility")
-# ax.set_title("SSVI Local Volatility")
-# plt.show()
