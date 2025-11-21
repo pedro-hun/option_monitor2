@@ -88,7 +88,7 @@ class SingleExpiry:
 
             plt.xlabel("Log Moneyness")
             plt.ylabel("Implied Volatility")
-            plt.title(f"SVI Fit to Market Data - {self.single_df['TTE_days'].iloc[0]} Days to Expiry")
+            plt.title(f"SVI Fit to Market Data - {self.single_df['TTE_days'].iloc[0]} Days to Expiry, expiration={self.single_df['Expiry'].iloc[0]}")
             plt.legend()
             plt.grid(True, alpha=0.3)
 
