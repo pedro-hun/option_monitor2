@@ -49,7 +49,7 @@ class ObservedSSVISlice:
         Left-wing slope (Put wing).
     c : float
         Right-wing slope (Call wing).
-    rho_raw : float
+    svi_rho : float
         Raw skew (assumed to come from prior SVI fits), used for diagnostics.
     metadata : Dict[str, float]
         Optional container with additional metrics (e.g., bid-ask spread stats).
@@ -61,7 +61,7 @@ class ObservedSSVISlice:
     psi: float
     p: float
     c: float
-    rho_raw: float
+    svi_rho: float
     metadata: Dict[str, float] = field(default_factory=dict)
 
     def validate(self) -> None:
@@ -72,10 +72,15 @@ class ObservedSSVISlice:
             raise InvalidSliceError("time_to_expiry must be positive.")
         if self.theta <= 0:
             raise InvalidSliceError("theta must be positive.")
-        if any(val < 0 for val in (self.psi, self.p, self.c)):
-            raise InvalidSliceError("psi, p, and c must be non-negative.")
-        if self.psi < max(self.p, self.c) * 2.0 - 1e-12:
-            raise InvalidSliceError("psi must be at least 2 * max(p, c).")
+        # if any(val < 0 for val in (self.psi, self.p, self.c)):
+        #     print(f"Invalid values detected: psi={self.psi}, p={self.p}, c={self.c}, for expiry={self.expiry}")
+        #     raise InvalidSliceError("psi, p, and c must be non-negative.")
+        if -self.p > self.psi * 2.0:
+            print(f"Invalid psi detected: psi={self.psi}, p={self.p}, c={self.c}, for expiry={self.expiry}")
+            raise InvalidSliceError("psi must be at least 2 * -p.")
+        if 2.0 * self.psi > self.c:
+            print(f"Invalid psi detected: psi={self.psi}, p={self.p}, c={self.c}, for expiry={self.expiry}")
+            raise InvalidSliceError("psi must be at most c / 2.")
 
     @property
     def tau(self) -> float:
@@ -343,6 +348,24 @@ class ArbitrageConditions:
         rhs = 4.0 / min_theta
         return rhs - lhs
 
+    @staticmethod
+    def calendar_margin_2(
+        slice_a: ObservedSSVISlice,
+        slice_b: ObservedSSVISlice,
+    ) -> float:
+        """
+        Alternative calendar spread condition between earlier slice_a (tau_a < tau_b)
+        and later slice_b.
+        Returns minimal margin across both differences.
+        """
+        if slice_b.tau <= slice_a.tau:
+            raise ValueError("Slices must be ordered by increasing expiry.")
+
+        if slice_a.theta <= 0 or slice_b.theta <= 0:
+            return float("-inf")
+
+        return slice_a.theta - slice_b.theta
+
 
 # ---------------------------------------------------------------------------
 # Loss Function Implementations
@@ -386,10 +409,11 @@ class WeightedRelativeSquaredErrorLoss:
             loss += self._weights.p * self._relative_squared_error(p_model, slc.p)
             loss += self._weights.c * self._relative_squared_error(c_model, slc.c)
 
-            margin = ArbitrageConditions.butterfly_margin(slc.theta, psi_model, params.rho)
-            if margin < 0:
+            butterfly_margin = ArbitrageConditions.butterfly_margin(slc.theta, psi_model, params.rho)
+            if butterfly_margin < 0:
                 # Penalize butterfly arbitrage violations heavily
-                loss += 1e6 * abs(margin)
+                loss += 1e6 * abs(butterfly_margin)
+            
 
         return float(loss)
 
@@ -410,7 +434,7 @@ class ScipyOptimizationBackend:
     SciPy-based optimizer implementing the OptimizationBackend protocol.
     """
 
-    def __init__(self, method: str = "L-BFGS-B", maxiter: int = 1000, tol: float = 1e-9):
+    def __init__(self, method: str = "Nelder-Mead", maxiter: int = 1000, tol: float = 1e-9):
         if minimize is None:
             raise ImportError("scipy is required for ScipyOptimizationBackend.")
         self._method = method
@@ -436,50 +460,50 @@ class ScipyOptimizationBackend:
         return result.x, float(result.fun), info
 
 
-class GridSearchOptimizationBackend:
-    """
-    Deterministic fallback optimizer for environments without SciPy.
-    Performs a coarse grid search followed by a local refinement (optional).
-    """
+# class GridSearchOptimizationBackend:
+#     """
+#     Deterministic fallback optimizer for environments without SciPy.
+#     Performs a coarse grid search followed by a local refinement (optional).
+#     """
 
-    def __init__(
-        self,
-        rho_grid: Iterable[float] = np.linspace(-0.8, 0.8, 21),
-        eta_grid: Iterable[float] = np.linspace(0.01, 10.0, 30),
-        gamma_grid: Iterable[float] = np.linspace(0.0, 1.0, 21),
-    ):
-        self._rho_grid = list(rho_grid)
-        self._eta_grid = list(eta_grid)
-        self._gamma_grid = list(gamma_grid)
+#     def __init__(
+#         self,
+#         rho_grid: Iterable[float] = np.linspace(-0.8, 0.8, 21),
+#         eta_grid: Iterable[float] = np.linspace(0.01, 10.0, 30),
+#         gamma_grid: Iterable[float] = np.linspace(0.0, 1.0, 21),
+#     ):
+#         self._rho_grid = list(rho_grid)
+#         self._eta_grid = list(eta_grid)
+#         self._gamma_grid = list(gamma_grid)
 
-    def minimize(
-        self,
-        fun: callable,
-        x0: np.ndarray,
-        bounds: Sequence[Tuple[float, float]],
-        **kwargs,
-    ) -> Tuple[np.ndarray, float, Dict[str, float]]:
-        best_x = None
-        best_val = float("inf")
-        evaluations = 0
+#     def minimize(
+#         self,
+#         fun: callable,
+#         x0: np.ndarray,
+#         bounds: Sequence[Tuple[float, float]],
+#         **kwargs,
+#     ) -> Tuple[np.ndarray, float, Dict[str, float]]:
+#         best_x = None
+#         best_val = float("inf")
+#         evaluations = 0
 
-        for rho in self._rho_grid:
-            for eta in self._eta_grid:
-                for gamma in self._gamma_grid:
-                    x = np.array([rho, eta, gamma], dtype=float)
-                    if not self._within_bounds(x, bounds):
-                        continue
-                    val = fun(x)
-                    evaluations += 1
-                    if val < best_val:
-                        best_val = val
-                        best_x = x
+#         for rho in self._rho_grid:
+#             for eta in self._eta_grid:
+#                 for gamma in self._gamma_grid:
+#                     x = np.array([rho, eta, gamma], dtype=float)
+#                     if not self._within_bounds(x, bounds):
+#                         continue
+#                     val = fun(x)
+#                     evaluations += 1
+#                     if val < best_val:
+#                         best_val = val
+#                         best_x = x
 
-        if best_x is None:
-            raise CalibrationError("Grid search failed to evaluate any feasible points.")
+#         if best_x is None:
+#             raise CalibrationError("Grid search failed to evaluate any feasible points.")
 
-        info = {"converged": True, "evaluations": evaluations, "status": 0}
-        return best_x, best_val, info
+#         info = {"converged": True, "evaluations": evaluations, "status": 0}
+#         return best_x, best_val, info
 
     @staticmethod
     def _within_bounds(x: np.ndarray, bounds: Sequence[Tuple[float, float]]) -> bool:
@@ -529,6 +553,12 @@ class SSVICalibrator:
             x0=x0,
             bounds=self._bounds,
         )
+        # solution, objective_value, info = minimize(
+        #     fun=lambda x: self._loss_function(x, slices),
+        #     x0=x0,
+        #     bounds=self._bounds,
+        # )
+
 
         params = SSVIParameters(rho=float(solution[0]), eta=float(solution[1]), gamma=float(solution[2]))
         params.validate()
@@ -617,7 +647,7 @@ class DataFrameSliceProvider:
         "psi",
         "p_t",
         "c_t",
-        "rho_raw",
+        "svi_rho",
     )
 
     def __init__(
@@ -644,7 +674,7 @@ class DataFrameSliceProvider:
                 psi=float(row["psi"]),
                 p=float(row["p_t"]),
                 c=float(row["c_t"]),
-                rho_raw=float(row["rho_raw"]),
+                svi_rho=float(row["svi_rho"]),
                 metadata=metadata,
             )
             slices.append(slice_obj)
@@ -688,17 +718,17 @@ def build_default_calibrator(
     slice_provider = DataFrameSliceProvider(df, column_map=column_map, metadata_columns=metadata_columns)
     loss_fn = WeightedRelativeSquaredErrorLoss(loss_weights or LossWeights())
 
-    if optimizer is None:
-        if minimize is not None:
-            optimizer = ScipyOptimizationBackend()
-        else:
-            warnings.warn("SciPy not available, falling back to grid-search optimizer.")
-            optimizer = GridSearchOptimizationBackend()
+    # if optimizer is None:
+    #     if minimize is not None:
+    #         optimizer = ScipyOptimizationBackend()
+    #     else:
+    #         warnings.warn("SciPy not available, falling back to grid-search optimizer.")
+    #         optimizer = GridSearchOptimizationBackend()
 
     calibrator = SSVICalibrator(
         slice_provider=slice_provider,
         loss_function=loss_fn,
-        optimizer=optimizer,
+        optimizer=ScipyOptimizationBackend(),
     )
     return calibrator, slice_provider
 
