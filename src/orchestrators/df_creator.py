@@ -218,6 +218,19 @@ class DFCreator:
     
     def apply_natural(self) -> pd.DataFrame:
         self.filtered_df = self.apply_jw().copy()
+            # Calculate theta (total variance at the money) for each expiry
+        self.filtered_df["theta"] = np.nan
+        
+        for tte_days in self.filtered_df['TTE_days'].unique():
+            expiry_mask = self.filtered_df["TTE_days"] == tte_days
+            expiry_data = self.filtered_df[expiry_mask].copy()
+            
+            # Find the option with LogMoneyness closest to zero
+            closest_to_atm_idx = expiry_data["LogMoneyness"].abs().idxmin()
+            theta_value = self.filtered_df.loc[closest_to_atm_idx, "W"]
+            
+            # Assign this theta value to all options in this expiry
+            self.filtered_df.loc[expiry_mask, "theta"] = theta_value
         self.filtered_df["svi_delta"] = self.filtered_df.apply(lambda row: delta_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
         self.filtered_df["svi_mi"] = self.filtered_df.apply(lambda row: mi_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
         self.filtered_df["svi_omega"] = self.filtered_df.apply(lambda row: omega_svi(a=row["svi_a"], b=row["svi_b"], rho=row["svi_rho"], m=row["svi_m"], sigma=row["svi_sigma"]), axis=1)
